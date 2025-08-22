@@ -1,0 +1,130 @@
+{
+  "documentationUrl": "https://docs.airbyte.com/integrations/sources/btg",
+  "connectionSpecification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "BTG Source Spec",
+    "type": "object",
+    "required": ["categories", "sync_schedule", "endpoints"],
+    "properties": {
+      "categories": {
+        "type": "object",
+        "title": "Categories Configuration",
+        "description": "Configuration for different BTG API categories, ex: Gestora, ALL, Líquidos, etc.",
+        "patternProperties": {
+          "^[a-zA-Z_]+$": {
+            "type": "object",
+            "required": ["enabled", "client_id", "client_secret"],
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "title": "Enabled",
+                "description": "Enable this category"
+              },
+              "client_id": {
+                "type": "string",
+                "title": "Client ID",
+                "description": "Client ID for this category"
+              },
+              "client_secret": {
+                "type": "string",
+                "title": "Client Secret",
+                "description": "Client Secret for this category",
+                "airbyte_secret": true
+              }
+            }
+          }
+        }
+      },
+      "sync_schedule": {
+        "type": "object",
+        "title": "Sync Schedule Configuration",
+        "required": ["personas", "start_date", "end_date"],
+        "properties": {
+          "personas": {
+            "type": "array",
+            "title": "Personas",
+            "description": "List of persona IDs to sync",
+            "items": {
+              "type": "string"
+            }
+          },
+          "start_date": {
+            "type": "string",
+            "title": "Start Date",
+            "description": "Start date for sync (YYYY-MM-DD)",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date", 
+            "description": "End date for sync (YYYY-MM-DD)",
+            "format": "date"
+          },
+          "date_step_days": {
+            "type": "integer",
+            "title": "Date Step Days",
+            "description": "Number of days per batch",
+            "default": 1,
+            "minimum": 1
+          }
+        }
+      },
+      "endpoints": {
+        "type": "object",
+        "title": "Endpoints Configuration",
+        "description": "Configuration for each endpoint",
+        "patternProperties": {
+          "^[a-zA-Z_]+$": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "title": "Enabled",
+                "description": "Enable this endpoint",
+                "default": true
+              },
+              "params": {
+                "type": "object",
+                "title": "Parameters",
+                "description": "Endpoint-specific parameters",
+                "additionalProperties": {
+                  "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}}
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "technical": {
+        "type": "object",
+        "title": "Technical Configuration",
+        "properties": {
+          "stream_strategy": {
+            "type": "string",
+            "title": "Stream Strategy",
+            "description": "Strategy for creating streams",
+            "enum": ["category_endpoint", "split_by_persona", "split_by_category"],
+            "default": "category_endpoint"
+          },
+          "max_retries": {
+            "type": "integer",
+            "title": "Max Retries",
+            "description": "Maximum number of retries",
+            "default": 3,
+            "minimum": 0
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "title": "Timeout Seconds",
+            "description": "Request timeout in seconds",
+            "default": 300,
+            "minimum": 1
+          }
+        }
+      }
+    }
+  }
+}
