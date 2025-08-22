@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: airbyte-source-btg
+Version: 0.2.0
+Summary: Airbyte Source (BTG) — Multi‑Route async jobs (submit→poll→download)
+Requires-Dist: airbyte-cdk==6.60.13
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: python-dateutil>=2.8.2
+Requires-Dist: xmltodict>=0.13.0
+Dynamic: requires-dist
+Dynamic: summary

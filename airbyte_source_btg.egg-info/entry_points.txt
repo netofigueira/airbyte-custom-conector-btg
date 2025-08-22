@@ -1,0 +1,2 @@
+[console_scripts]
+airbyte-source-btg = source_btg.source:run

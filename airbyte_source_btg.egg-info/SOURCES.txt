@@ -1,0 +1,12 @@
+README.md
+setup.py
+airbyte_source_btg.egg-info/PKG-INFO
+airbyte_source_btg.egg-info/SOURCES.txt
+airbyte_source_btg.egg-info/dependency_links.txt
+airbyte_source_btg.egg-info/entry_points.txt
+airbyte_source_btg.egg-info/requires.txt
+airbyte_source_btg.egg-info/top_level.txt
+source_btg/__init__.py
+source_btg/auth.py
+source_btg/source.py
+source_btg/utils.py

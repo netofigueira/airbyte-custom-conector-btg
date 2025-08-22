@@ -1,0 +1,26 @@
+# Core Airbyte dependencies
+airbyte-cdk>=0.51.0
+
+# HTTP and API communication
+requests>=2.28.0
+urllib3>=1.26.0
+
+# Date and time utilities
+python-dateutil>=2.8.0
+
+# XML parsing (for BTG responses)
+lxml>=4.9.0
+
+# JSON handling (enhanced)
+jsonschema
+
+# Retry and backoff utilities
+tenacity>=8.0.0
+
+# Logging enhancements
+structlog>=22.0.0
+
+# Development and testing (optional)
+pytest>=6.2.5
+pytest-mock>=3.6.1
+requests-mock>=1.9.3

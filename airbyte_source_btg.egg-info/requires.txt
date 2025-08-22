@@ -1,0 +1,5 @@
+airbyte-cdk==6.60.13
+requests>=2.31.0
+pandas>=2.0.0
+python-dateutil>=2.8.2
+xmltodict>=0.13.0
