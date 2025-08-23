@@ -2,105 +2,81 @@ from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.models import ConnectorSpecification
 from typing import Any, List, Mapping, Tuple
-import json
 
 from .streams.base_async import AsyncJobStream
 from .auth import BTGTokenProvider
 from .streams.endpoint_configs import ENDPOINT_CONFIGS
 
 class SourceBtg(AbstractSource):
-    
+
     def spec(self, logger) -> ConnectorSpecification:
-        """Retorna a especificação do conector"""
         return ConnectorSpecification(
             documentationUrl="https://docs.airbyte.com/integrations/sources/btg",
             connectionSpecification={
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "title": "BTG Source Spec",
                 "type": "object",
-                "required": ["categories", "sync_schedule", "endpoints"],
+                "required": ["base_url", "auth", "categories", "sync_schedule", "endpoints"],
+                "additionalProperties": False,
                 "properties": {
+                    "base_url": {
+                        "type": "string",
+                        "title": "Base URL",
+                        "description": "Ex.: https://api.seubtg.com/v1",
+                        "examples": ["https://api.seubtg.com/v1"]
+                    },
+                    "auth": {
+                        "type": "object",
+                        "title": "Auth",
+                        "required": ["client_id", "client_secret"],
+                        "additionalProperties": False,
+                        "properties": {
+                            "client_id": {"type": "string", "title": "Client ID"},
+                            "client_secret": {"type": "string", "title": "Client Secret", "airbyte_secret": True}
+                        }
+                    },
                     "categories": {
                         "type": "object",
                         "title": "Categories Configuration",
-                        "description": "Configuration for different BTG API categories, ex: Gestora, ALL, Líquidos, etc.",
+                        "description": "Config por categoria (ex.: GESTORA, ALL...). Chaves: letras/underscore.",
                         "patternProperties": {
                             "^[a-zA-Z_]+$": {
                                 "type": "object",
-                                "required": ["enabled", "client_id", "client_secret"],
+                                "required": ["enabled"],
+                                "additionalProperties": False,
                                 "properties": {
-                                    "enabled": {
-                                        "type": "boolean",
-                                        "title": "Enabled",
-                                        "description": "Enable this category"
-                                    },
-                                    "client_id": {
-                                        "type": "string",
-                                        "title": "Client ID",
-                                        "description": "Client ID for this category"
-                                    },
-                                    "client_secret": {
-                                        "type": "string",
-                                        "title": "Client Secret",
-                                        "description": "Client Secret for this category",
-                                        "airbyte_secret": True
-                                    }
+                                    "enabled": {"type": "boolean", "title": "Enabled", "default": True},
+                                    "client_id": {"type": "string", "title": "Client ID (override opcional)"},
+                                    "client_secret": {"type": "string", "title": "Client Secret (override opcional)", "airbyte_secret": True}
                                 }
                             }
-                        }
+                        },
+                        "additionalProperties": False
                     },
                     "sync_schedule": {
                         "type": "object",
-                        "title": "Sync Schedule Configuration",
+                        "title": "Sync Schedule",
                         "required": ["personas", "start_date", "end_date"],
+                        "additionalProperties": False,
                         "properties": {
-                            "personas": {
-                                "type": "array",
-                                "title": "Personas",
-                                "description": "List of persona IDs to sync",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "start_date": {
-                                "type": "string",
-                                "title": "Start Date",
-                                "description": "Start date for sync (YYYY-MM-DD)",
-                                "format": "date"
-                            },
-                            "end_date": {
-                                "type": "string",
-                                "title": "End Date", 
-                                "description": "End date for sync (YYYY-MM-DD)",
-                                "format": "date"
-                            },
-                            "date_step_days": {
-                                "type": "integer",
-                                "title": "Date Step Days",
-                                "description": "Number of days per batch",
-                                "default": 1,
-                                "minimum": 1
-                            }
+                            "personas": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                            "start_date": {"type": "string", "format": "date"},
+                            "end_date": {"type": "string", "format": "date"},
+                            "date_step_days": {"type": "integer", "default": 1, "minimum": 1}
                         }
                     },
                     "endpoints": {
                         "type": "object",
-                        "title": "Endpoints Configuration",
-                        "description": "Configuration for each endpoint",
+                        "title": "Endpoints",
+                        "description": "Mapeie endpoints por nome (apenas letras/underscore).",
                         "patternProperties": {
                             "^[a-zA-Z_]+$": {
                                 "type": "object",
+                                "additionalProperties": False,
                                 "properties": {
-                                    "enabled": {
-                                        "type": "boolean",
-                                        "title": "Enabled",
-                                        "description": "Enable this endpoint",
-                                        "default": True
-                                    },
+                                    "enabled": {"type": "boolean", "default": True},
                                     "params": {
                                         "type": "object",
-                                        "title": "Parameters",
-                                        "description": "Endpoint-specific parameters",
                                         "additionalProperties": {
                                             "oneOf": [
                                                 {"type": "string"},
@@ -110,110 +86,111 @@ class SourceBtg(AbstractSource):
                                     }
                                 }
                             }
-                        }
+                        },
+                        "additionalProperties": False
                     },
                     "technical": {
                         "type": "object",
-                        "title": "Technical Configuration",
+                        "title": "Technical",
+                        "additionalProperties": False,
                         "properties": {
                             "stream_strategy": {
                                 "type": "string",
-                                "title": "Stream Strategy",
-                                "description": "Strategy for creating streams",
                                 "enum": ["category_endpoint", "split_by_persona", "split_by_category"],
                                 "default": "category_endpoint"
                             },
-                            "max_retries": {
-                                "type": "integer",
-                                "title": "Max Retries",
-                                "description": "Maximum number of retries",
-                                "default": 3,
-                                "minimum": 0
-                            },
-                            "timeout_seconds": {
-                                "type": "integer",
-                                "title": "Timeout Seconds",
-                                "description": "Request timeout in seconds",
-                                "default": 300,
-                                "minimum": 1
-                            }
+                            "max_retries": {"type": "integer", "default": 3, "minimum": 0},
+                            "timeout_seconds": {"type": "integer", "default": 300, "minimum": 1}
                         }
                     }
                 }
             }
         )
-    
-    def check_connection(self, logger, config) -> Tuple[bool, any]:
+
+    # -------- helpers novos --------
+    def _effective_auth(self, config: Mapping[str, Any], category_cfg: Mapping[str, Any]) -> dict:
+        """Merge das credenciais globais (auth) com overrides da categoria."""
+        auth_cfg = config.get("auth", {}) or {}
+        return {
+            "client_id": category_cfg.get("client_id", auth_cfg.get("client_id")),
+            "client_secret": category_cfg.get("client_secret", auth_cfg.get("client_secret")),
+        }
+
+    def _make_token_provider(self, config: Mapping[str, Any], category_name: str, category_cfg: Mapping[str, Any]) -> BTGTokenProvider:
+        base_url = config["base_url"]
+        creds = self._effective_auth(config, category_cfg)
+        return BTGTokenProvider({**creds, "base_url": base_url}, category_name)
+    # -------- fim helpers --------
+
+    def check_connection(self, logger, config) -> Tuple[bool, Any]:
         """Testa conexão com todas as categorias habilitadas"""
         try:
-            categories = config.get("categories", {})
+            # valida base_url
+            if "base_url" not in config or not config["base_url"]:
+                return False, "Missing 'base_url' in config"
+
+            categories = config.get("categories", {}) or {}
+            if not categories:
+                return False, "No categories provided"
+
             errors = []
-            
-            for category_name, category_config in categories.items():
-                if not category_config.get("enabled", False):
+            for category_name, category_cfg in categories.items():
+                if not category_cfg.get("enabled", False):
                     continue
-                    
                 try:
-                    token_provider = BTGTokenProvider(category_config, category_name)
-                    token = token_provider.get()
+                    token_provider = self._make_token_provider(config, category_name, category_cfg)
+                    _ = token_provider.get()
                     logger.info(f"✅ {category_name.upper()}: Connection successful")
-                    
                 except Exception as e:
-                    error_msg = f"❌ {category_name.upper()}: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(error_msg)
-            
-            if errors:
-                return False, "; ".join(errors)
-            
-            return True, None
-            
+                    msg = f"{category_name.upper()}: {e}"
+                    errors.append(msg)
+                    logger.error(f"❌ {msg}")
+
+            return (False, "; ".join(errors)) if errors else (True, None)
+
         except Exception as e:
             return False, str(e)
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         """Cria streams baseado na nova estrutura de config"""
-        
-        streams = []
-        categories = config.get("categories", {})
-        endpoints_config = config.get("endpoints", {})
-        
+        streams: List[Stream] = []
+
+        base_url = config["base_url"]
+        categories = config.get("categories", {}) or {}
+        endpoints_config = config.get("endpoints", {}) or {}
+
         print(f"🏷️  Processing {len(categories)} categories")
         print(f"📊 Processing {len(endpoints_config)} endpoints")
-        
-        # Criar streams para cada categoria + endpoint habilitado
-        for category_name, category_config in categories.items():
-            if not category_config.get("enabled", False):
+
+        for category_name, category_cfg in categories.items():
+            if not category_cfg.get("enabled", False):
                 print(f"⏭️  Skipping disabled category: {category_name}")
                 continue
-                
+
             print(f"🏷️  Creating streams for {category_name.upper()}")
-            token_provider = BTGTokenProvider(category_config, category_name)
-            
-            for endpoint_name, endpoint_config in endpoints_config.items():
-                if not endpoint_config.get("enabled", True):
+            token_provider = self._make_token_provider(config, category_name, category_cfg)
+
+            for endpoint_name, ep_cfg in endpoints_config.items():
+                if not ep_cfg.get("enabled", True):
                     print(f"⏭️  Skipping disabled endpoint: {endpoint_name}")
                     continue
-                
-                # Verificar se endpoint existe no ENDPOINT_CONFIGS
+
                 if endpoint_name not in ENDPOINT_CONFIGS:
                     print(f"⚠️  Endpoint {endpoint_name} not found in ENDPOINT_CONFIGS")
                     continue
-                
-                # Criar route config para este endpoint
+
                 route_config = self._create_route_config(endpoint_name, category_name)
-                
-                # Nome do stream: categoria_endpoint
                 stream_name = f"{category_name}_{endpoint_name}"
-                
-                # Merge config da categoria com config global
+
                 merged_config = {
                     **config,
-                    "category_auth": category_config,
+                    "base_url": base_url,
+                    "category_auth": self._effective_auth(config, category_cfg),
                     "current_endpoint": endpoint_name,
-                    "current_category": category_name
+                    "current_category": category_name,
+                    "endpoint_params": ep_cfg.get("params", {})
                 }
-                
+
                 stream = CategoryAsyncJobStream(
                     config=merged_config,
                     token_provider=token_provider,
@@ -223,15 +200,12 @@ class SourceBtg(AbstractSource):
                 )
                 streams.append(stream)
                 print(f"✅ Created stream: {stream_name}")
-        
+
         print(f"📊 Created {len(streams)} streams total")
         return streams
-    
+
     def _create_route_config(self, endpoint: str, category: str) -> dict:
-        """Cria configuração de route para um endpoint específico"""
-        
         base_config = ENDPOINT_CONFIGS.get(endpoint, {})
-        
         return {
             **base_config,
             "name": endpoint,
@@ -244,24 +218,22 @@ class SourceBtg(AbstractSource):
 
 class CategoryAsyncJobStream(AsyncJobStream):
     """AsyncJobStream com suporte a múltiplas categorias e endpoints"""
-    
+
     def __init__(self, config, token_provider, route, category, endpoint):
         self.category = category
         self.endpoint = endpoint
+        # garante que _name exista (evita AttributeError)
+        self._name = route.get("name", f"{category}_{endpoint}")
         super().__init__(config, token_provider, route)
-    
+
     @property
     def name(self) -> str:
-        """Nome do stream com categoria"""
         return self._name
 
     def read_records(self, stream_slice=None, **kwargs):
-        """Override com metadata de categoria e endpoint"""
         for record in super().read_records(stream_slice, **kwargs):
-            # Adicionar metadata
             record["_category"] = self.category
             record["_endpoint"] = self.endpoint
             record["_source_category"] = self.category.upper()
             record["_api_endpoint"] = self.route.get("submit_path")
-            
             yield record

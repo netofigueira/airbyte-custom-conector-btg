@@ -13,7 +13,6 @@ COPY source_btg ./source_btg
 COPY main.py ./
 COPY setup.py ./
 COPY requirements.txt ./
-COPY spec.json ./
 
 # Install Python dependencies
 RUN pip install --upgrade pip
@@ -25,4 +24,6 @@ LABEL io.airbyte.version=0.1.0
 LABEL io.airbyte.name=airbyte/source-btg
 
 # Set entrypoint to use main.py directly
+ENV AIRBYTE_ENTRYPOINT="python /airbyte/integration_code/main.py"
+
 ENTRYPOINT ["python", "/airbyte/integration_code/main.py"]
