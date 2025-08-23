@@ -28,10 +28,25 @@ class AsyncJobStream(HttpStream):
         self.session = requests.Session()
         super().__init__()
 
+
+    def _timeout(self) -> int:
+        return int(self.cfg.get("http_timeout_seconds")
+                or self.cfg.get("technical", {}).get("timeout_seconds")
+                or 60)
+
+    def _max_wait(self) -> int:
+        return int(self.cfg.get("max_wait_seconds") or 900)
+
+    def _uses_date(self) -> bool:
+        submit_body = self.route.get("submit_body", {})
+        submit_params = self.route.get("submit_params", {})
+        blob = json.dumps({"b": submit_body, "p": submit_params}, ensure_ascii=False).lower()
+        return ("{{date_iso}}" in blob) or ("{{date}}" in blob) or ("{{date_str}}" in blob)
     # ========== stubs obrigatórios do CDK ==========
     @property
     def url_base(self) -> str:
-        return (self.cfg.get("url_base") or "https://funds.btgpactual.com").rstrip("/") + "/"
+        base = (self.cfg.get("base_url") or self.cfg.get("url_base") or "https://funds.btgpactual.com").rstrip("/")
+        return base + "/"
 
     def path(self, **kwargs) -> str:
         return self.route.get("submit_path", "/")
@@ -54,6 +69,26 @@ class AsyncJobStream(HttpStream):
     @name.setter
     def name(self, value: str):
         self._name = value
+
+
+    @property
+    def supports_incremental(self) -> bool:
+        return True
+
+    @property
+    def cursor_field(self) -> str:
+        # você já emite esse campo nos yields
+        return "_dt_referencia"
+
+    def get_updated_state(self, current_stream_state: Mapping[str, Any], latest_record: Mapping[str, Any]):
+        state = dict(current_stream_state or {})
+        key = self.route.get("name", self._name)
+        cur = latest_record.get("_dt_referencia")
+        last = state.get(key)
+        if cur and (not last or cur > last):
+            state[key] = cur
+        return state
+
 
     # token provider
     @property
@@ -106,66 +141,53 @@ class AsyncJobStream(HttpStream):
             current += timedelta(days=step_days)
 
     def stream_slices(self, *, sync_mode, cursor_field=None, stream_state=None, **kwargs):
-        """Stream slices sem persona - muito mais simples"""
-        
         route_name = self.route.get("name", "")
-        endpoint = '_'.join(route_name.split('_')[1:])
-        
-        print(f"🔍 DEBUG stream_slices: route_name = {route_name}")
-        
-        sync_config = self.cfg.get("sync_schedule", {})
-        start_date = sync_config.get("start_date", "2024-01-01")
+        endpoint = "_".join(route_name.split("_")[1:]) if "_" in route_name else route_name
+
+        uses_date = self._uses_date()
+        sync_config = self.cfg.get("sync_schedule", {}) or {}
+        start_date = sync_config.get("start_date")
         end_date = sync_config.get("end_date")
-        date_step_days = sync_config.get("date_step_days", 1)
-        
-        for d in self.daterange(start_date, end_date, date_step_days):
-            base_slice = {
-                "date_str": d.strftime("%d/%m/%Y"),
-                "date_iso": d.strftime("%Y-%m-%d"),
-            }
-            
-            # Adicionar parâmetros específicos do endpoint
+        step = int(sync_config.get("date_step_days", 1))
+
+        windows = [None]
+        if uses_date and start_date and end_date:
+            windows = [{"date_str": d.strftime("%d/%m/%Y"),
+                        "date_iso": d.strftime("%Y-%m-%d")}
+                    for d in self.daterange(start_date, end_date, step)]
+
+        endpoint_params = self.cfg.get("endpoint_params")
+        if endpoint_params is None:
             endpoint_params = self._get_endpoint_parameters(endpoint)
-            
-            if endpoint_params:
-                param_combinations = self._generate_param_combinations(endpoint_params)
-                
-                for params in param_combinations:
-                    slice_data = {**base_slice, **params}
-                    print(f"🔍 DEBUG yielding {endpoint}: {slice_data}")
-                    yield slice_data
+
+        combos = self._generate_param_combinations(endpoint_params)
+
+        for w in windows:
+            base_slice = w or {}
+            if combos:
+                for params in combos:
+                    yield {**base_slice, **params}
             else:
-                print(f"🔍 DEBUG yielding base {endpoint}: {base_slice}")
                 yield base_slice
 
+
     def _get_endpoint_parameters(self, endpoint: str) -> dict:
-        """Pega parâmetros do endpoint na nova estrutura"""
-        
-        endpoints_config = self.cfg.get("endpoints", {})
-        endpoint_config = endpoints_config.get(endpoint, {})
-        
-        print(f"🔍 DEBUG _get_endpoint_parameters: endpoint = {endpoint}")
-        print(f"🔍 DEBUG endpoint_config = {endpoint_config}")
-        
-        params = endpoint_config.get("params", {})
-        print(f"🔍 DEBUG params = {params}")
-        
-        return params
+        endpoints_config = self.cfg.get("endpoints") or {}
+        endpoint_config = endpoints_config.get(endpoint) or {}
+        return endpoint_config.get("params") or {}
 
     def _generate_param_combinations(self, params: dict) -> list:
-        """Gera todas as combinações de parâmetros"""
         if not params:
-            return [{}]
-        
-        keys = params.keys()
-        values = params.values()
-        
-        combinations = []
-        for combo in itertools.product(*values):
-            combinations.append(dict(zip(keys, combo)))
-        
-        print(f"🔍 DEBUG param combinations: {len(combinations)} total")
-        return combinations
+            return []
+        keys = list(params.keys())
+        vals = []
+        for k in keys:
+            v = params[k]
+            if isinstance(v, list):
+                vals.append(v if v else [None])
+            else:
+                vals.append([v])
+        return [dict(zip(keys, combo)) for combo in itertools.product(*vals)]
 
     # ---------- submit: retorna ticketId ----------
     def _submit(self, slice_ctx: Mapping) -> str:
@@ -414,7 +436,6 @@ class AsyncJobStream(HttpStream):
         
         slice_ = stream_slice or {}
         slice_ctx = {
-            "persona": slice_.get("persona"),
             "date": slice_.get("date_str"),
             "date_str": slice_.get("date_str"),
             "date_iso": slice_.get("date_iso"),
@@ -422,7 +443,7 @@ class AsyncJobStream(HttpStream):
         
         # Adicionar todos os parâmetros extras do slice
         for key, value in slice_.items():
-            if key not in ["persona", "date_str", "date_iso"]:
+            if key not in [ "date_str", "date_iso"]:
                 slice_ctx[key] = value
         
         print(f"🔍 DEBUG read_records: slice_ctx final = {slice_ctx}")
@@ -448,7 +469,6 @@ class AsyncJobStream(HttpStream):
                     yield {
                         **(rec if isinstance(rec, dict) else {"value": rec}),
                         "_route": self._name,
-                        "_persona_pj_id": slice_ctx["persona"],
                         "_dt_referencia": slice_ctx["date"],
                         "_ticket_id": ticket,
                         "_row_number": row_idx,
@@ -483,7 +503,6 @@ class AsyncJobStream(HttpStream):
                             yield {
                                 **(rec if isinstance(rec, dict) else {"value": rec}),
                                 "_route": self._name,
-                                "_persona_pj_id": slice_ctx["persona"],
                                 "_dt_referencia": slice_ctx["date"],
                                 "_ticket_id": ticket,
                                 "_row_number": row_idx,
@@ -497,7 +516,6 @@ class AsyncJobStream(HttpStream):
                             "error": f"Download failed: {e}",
                             "file_info": file_info,
                             "_route": self._name,
-                            "_persona_pj_id": slice_ctx["persona"],
                             "_dt_referencia": slice_ctx["date"],
                             "_ticket_id": ticket,
                             "_row_number": row_idx,
@@ -523,7 +541,6 @@ class AsyncJobStream(HttpStream):
                         yield {
                             **(rec if isinstance(rec, dict) else {"value": rec}),
                             "_route": self._name,
-                            "_persona_pj_id": slice_ctx["persona"],
                             "_dt_referencia": slice_ctx["date"],
                             "_ticket_id": ticket,
                             "_row_number": row_idx,
@@ -535,7 +552,6 @@ class AsyncJobStream(HttpStream):
                         "message": f"No processable data found in JSON response",
                         "json_response": json_data,
                         "_route": self._name,
-                        "_persona_pj_id": slice_ctx["persona"],
                         "_dt_referencia": slice_ctx["date"],
                         "_ticket_id": ticket,
                         "_row_number": 0,
@@ -546,7 +562,6 @@ class AsyncJobStream(HttpStream):
                     "error": f"Unknown response mode: {status.get('__mode__')}",
                     "status": status,
                     "_route": self._name,
-                    "_persona_pj_id": slice_ctx["persona"],
                     "_dt_referencia": slice_ctx["date"],
                     "_ticket_id": ticket,
                     "_row_number": 0,
@@ -559,7 +574,6 @@ class AsyncJobStream(HttpStream):
                 "error": str(e),
                 "slice_ctx": slice_ctx,
                 "_route": self._name,
-                "_persona_pj_id": slice_ctx.get("persona"),
                 "_dt_referencia": slice_ctx.get("date"),
                 "_ticket_id": "error",
                 "_row_number": 0,
