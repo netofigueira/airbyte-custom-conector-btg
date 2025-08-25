@@ -305,8 +305,10 @@ class AsyncJobStream(HttpStream):
                         
                         # Verificar se ainda está processando
                         result = js.get("result", "")
-                        if result in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING"]:
+                        if result in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING", "Aguardando Processamento"]:
                             self.log.debug(f" Still processing ({result})... waiting")
+                            self.log.info(f" TICKET Still processing ({result})... waiting")
+
                             # Continuar o loop
                         else:
                             # Job completou
