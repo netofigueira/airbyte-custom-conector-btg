@@ -18,20 +18,18 @@ class SourceBtg(AbstractSource):
                 "$schema": "http://json-schema.org/draft-07/schema#",
                 "title": "BTG API Source",
                 "type": "object",
-                "required": ["base_url", "auth", "endpoints"],
+                "required": ["base_url", "auth"],
                 "additionalProperties": False,
                 "properties": {
-                    # ===== BASIC CONFIG =====
                     "base_url": {
                         "type": "string",
                         "title": "Base URL",
                         "description": "BTG API base URL",
-                        "default": "https://funds.btgpactual.com",
-                        "examples": ["https://funds.btgpactual.com"]
+                        "default": "https://funds.btgpactual.com"
                     },
                     "auth": {
                         "type": "object",
-                        "title": "Auth",
+                        "title": "Authentication",
                         "required": ["client_id", "client_secret"],
                         "additionalProperties": False,
                         "properties": {
@@ -39,211 +37,121 @@ class SourceBtg(AbstractSource):
                             "client_secret": {"type": "string", "title": "Client Secret", "airbyte_secret": True}
                         }
                     },
-
-                    # ===== (OPCIONAL) OVERRIDE POR CATEGORIA =====
-                    "categories": {
-                        "type": "object",
-                        "title": "Category credentials (opcional)",
-                        "description": "Se quiser um conector por categoria, deixe vazio. Se quiser um único conector para várias categorias, habilite e informe credenciais.",
-                        "additionalProperties": False,
-                        "properties": {
-                            "GESTORA": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "client_id": {"type": "string"},
-                                    "client_secret": {"type": "string", "airbyte_secret": True}
-                                }
-                            },
-                            "ALL": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "client_id": {"type": "string"},
-                                    "client_secret": {"type": "string", "airbyte_secret": True}
-                                }
-                            },
-                            "LIQUIDOS": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "client_id": {"type": "string"},
-                                    "client_secret": {"type": "string", "airbyte_secret": True}
-                                }
-                            },
-                            "CE": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "client_id": {"type": "string"},
-                                    "client_secret": {"type": "string", "airbyte_secret": True}
-                                }
-                            }
-                        }
+                    
+                    # === ENDPOINTS COMO CHECKBOXES SIMPLES ===
+                    "enable_cadastro_fundos": {
+                        "type": "boolean",
+                        "title": "Enable Cadastro Fundos",
+                        "description": "Sync fund registry data",
+                        "default": True
                     },
-
-                    # ===== JANELA DE DATAS (usada só quando a rota aceita data) =====
-                    "sync_schedule": {
-                        "type": "object",
-                        "title": "Date window (opcional)",
-                        "additionalProperties": False,
-                        "properties": {
-                            "start_date": {"type": "string", "format": "date", "title": "Start date"},
-                            "end_date": {"type": "string", "format": "date", "title": "End date"},
-                            "date_step_days": {
-                                "type": "integer", "title": "Date step (days)",
-                                "description": "Tamanho do lote em dias (aplicável às rotas com data).",
-                                "default": 1, "minimum": 1, "maximum": 30
-                            }
-                        }
+                    "enable_fluxo_caixa": {
+                        "type": "boolean", 
+                        "title": "Enable Fluxo Caixa",
+                        "description": "Sync cashflow data (requires dates)",
+                        "default": True
                     },
-
-                    # ===== ENDPOINTS (cada rota tem 'enabled' + 'params' tipados) =====
-                    "endpoints": {
-                        "type": "object",
-                        "title": "Endpoints",
-                        "additionalProperties": False,
-                        "properties": {
-                            "cadastro_fundos": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": True},
-                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
-                                }
-                            },
-                            "fluxo_caixa": {
-                                "type": "object",
-                                "description": "Requer janela de datas em sync_schedule.",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": True},
-                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
-                                }
-                            },
-                            "movimentacao_fundo_d0": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "properties": {
-                                            "consult_type": {
-                                                "type": "array",
-                                                "title": "Consult type",
-                                                "items": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
-                                                "minItems": 1, "uniqueItems": True
-                                            },
-                                            "status": {
-                                                "type": "array",
-                                                "title": "Status",
-                                                "items": {"type": "string", "enum": ["LIQUIDADO", "PENDENTE", "CANCELADO", "PROCESSANDO"]},
-                                                "minItems": 1, "uniqueItems": True
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            "carteira": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "properties": {
-                                            "report_type": {
-                                                "type": "array",
-                                                "title": "Tipo de relatório",
-                                                "items": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
-                                                "minItems": 1, "uniqueItems": True
-                                            },
-                                            "fund_name": {
-                                                "type": "array",
-                                                "title": "Fundos",
-                                                "items": {"type": "string"},
-                                                "minItems": 1, "uniqueItems": True
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            "renda_fixa": {
-                                "type": "object",
-                                "description": "Requer janela de datas em sync_schedule.",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
-                                }
-                            },
-                            "extrato_cc": {
-                                "type": "object",
-                                "description": "Requer janela de datas em sync_schedule.",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
-                                }
-                            },
-                            "money_market": {
-                                "type": "object",
-                                "description": "Requer data (usa sync_schedule).",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
-                                }
-                            },
-                            "taxa_performance": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "enabled": {"type": "boolean", "default": False},
-                                    "params": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "properties": {
-                                            "fund_name": {
-                                                "type": "array",
-                                                "title": "Fundos",
-                                                "items": {"type": "string"},
-                                                "minItems": 1, "uniqueItems": True
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    "enable_movimentacao_fundo_d0": {
+                        "type": "boolean",
+                        "title": "Enable Movimentacao Fundo D0", 
+                        "description": "Sync fund movements D0",
+                        "default": False
                     },
-
-                    # ===== ADVANCED =====
-                    "technical": {
-                        "type": "object",
-                        "title": "Advanced",
-                        "additionalProperties": False,
-                        "properties": {
-                            "stream_strategy": {
-                                "type": "string",
-                                "enum": ["category_endpoint", "split_by_category"],
-                                "default": "category_endpoint"
-                            },
-                            "max_retries": {"type": "integer", "default": 3, "minimum": 0, "maximum": 10},
-                            "timeout_seconds": {"type": "integer", "default": 300, "minimum": 30, "maximum": 1800},
-                            "polling_max_wait_seconds": {"type": "integer", "default": 900, "minimum": 300, "maximum": 3600}
-                        }
+                    "enable_carteira": {
+                        "type": "boolean",
+                        "title": "Enable Carteira",
+                        "description": "Sync portfolio data",
+                        "default": False
+                    },
+                    "enable_renda_fixa": {
+                        "type": "boolean",
+                        "title": "Enable Renda Fixa",
+                        "description": "Sync fixed income data", 
+                        "default": False
+                    },
+                    "enable_extrato_cc": {
+                        "type": "boolean",
+                        "title": "Enable Extrato CC",
+                        "description": "Sync checking account statements",
+                        "default": False
+                    },
+                    "enable_money_market": {
+                        "type": "boolean",
+                        "title": "Enable Money Market",
+                        "description": "Sync money market data",
+                        "default": False
+                    },
+                    "enable_taxa_performance": {
+                        "type": "boolean",
+                        "title": "Enable Taxa Performance",
+                        "description": "Sync performance rate data",
+                        "default": False
+                    },
+                    
+                    # === MOVIMENTACAO PARAMS ===
+                    "movimentacao_consult_types": {
+                        "type": "string",
+                        "title": "Movimentacao Consult Types",
+                        "description": "Comma-separated consult types (e.g: 1,2,3)",
+                        "default": "1,2",
+                        "examples": ["1,2", "1,2,3"]
+                    },
+                    "movimentacao_status": {
+                        "type": "string", 
+                        "title": "Movimentacao Status",
+                        "description": "Comma-separated status (e.g: LIQUIDADO,PENDENTE)",
+                        "default": "LIQUIDADO,PENDENTE",
+                        "examples": ["LIQUIDADO,PENDENTE", "LIQUIDADO"]
+                    },
+                    
+                    # === DATE RANGE ===
+                    "start_date": {
+                        "type": "string",
+                        "format": "date", 
+                        "title": "Start Date",
+                        "description": "Start date for date-enabled endpoints",
+                        "examples": ["2024-01-15"]
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "format": "date",
+                        "title": "End Date", 
+                        "description": "End date for date-enabled endpoints",
+                        "examples": ["2024-01-17"]
+                    },
+                    "date_step_days": {
+                        "type": "integer",
+                        "title": "Date Step Days",
+                        "description": "Days per sync step",
+                        "default": 1,
+                        "minimum": 1
+                    },
+                    
+                    # === CATEGORY (SIMPLE) ===
+                    "category": {
+                        "type": "string",
+                        "title": "Category",
+                        "description": "BTG API Category", 
+                        "enum": ["DEFAULT", "GESTORA", "ALL", "LIQUIDOS", "CE"],
+                        "default": "DEFAULT"
+                    },
+                    
+                    # === ADVANCED ===
+                    "max_retries": {
+                        "type": "integer",
+                        "title": "Max Retries",
+                        "default": 3,
+                        "minimum": 0
+                    },
+                    "timeout_seconds": {
+                        "type": "integer", 
+                        "title": "Timeout Seconds",
+                        "default": 300,
+                        "minimum": 30
                     }
                 }
             }
         )
-
 
     # ---------- helpers ----------
     def _effective_auth(self, config: Mapping[str, Any], category_cfg: Mapping[str, Any]) -> dict:
@@ -286,14 +194,83 @@ class SourceBtg(AbstractSource):
             return False, str(e)
 
     # ---------- streams ----------
+
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
-        logger = logging.getLogger("airbyte")
         streams: List[Stream] = []
+        logger = logging.getLogger("airbyte")
 
         base_url = config["base_url"]
-        categories = config.get("categories") or {"DEFAULT": {"enabled": True}}
+        
+        # === CONVERSÃO UI → ESTRUTURA QUE SEU CÓDIGO ESPERA ===
+        
+        # Manter auth como está (compatibilidade)
+        if "auth" not in config:
+            # Fallback se vier no formato antigo
+            config["auth"] = {
+                "client_id": config.get("client_id"),
+                "client_secret": config.get("client_secret") 
+            }
+        
+        # Converter category simples → categories object
+        category = config.get("category", "DEFAULT")
+        categories = config.get("categories", {}) or {category: {"enabled": True}}
+        
+        # Converter checkboxes → endpoints object
         endpoints_cfg = config.get("endpoints", {})
-
+        if not endpoints_cfg:  # Se não tem endpoints no config, usar checkboxes
+            endpoints_cfg = {}
+            
+            if config.get("enable_cadastro_fundos", True):
+                endpoints_cfg["cadastro_fundos"] = {"enabled": True}
+                
+            if config.get("enable_fluxo_caixa", True):
+                endpoints_cfg["fluxo_caixa"] = {"enabled": True}
+                
+            if config.get("enable_movimentacao_fundo_d0", False):
+                # Converter strings "1,2,3" → arrays [1,2,3]
+                consult_types_str = config.get("movimentacao_consult_types", "1,2")
+                status_str = config.get("movimentacao_status", "LIQUIDADO,PENDENTE")
+                
+                consult_types = [int(x.strip()) for x in consult_types_str.split(",") if x.strip()]
+                status_list = [x.strip() for x in status_str.split(",") if x.strip()]
+                
+                endpoints_cfg["movimentacao_fundo_d0"] = {
+                    "enabled": True,
+                    "params": {
+                        "consult_type": consult_types,
+                        "status": status_list
+                    }
+                }
+                
+            if config.get("enable_carteira", False):
+                endpoints_cfg["carteira"] = {"enabled": True}
+                
+            if config.get("enable_renda_fixa", False):
+                endpoints_cfg["renda_fixa"] = {"enabled": True}
+                
+            if config.get("enable_extrato_cc", False):
+                endpoints_cfg["extrato_cc"] = {"enabled": True}
+                
+            if config.get("enable_money_market", False):
+                endpoints_cfg["money_market"] = {"enabled": True}
+                
+            if config.get("enable_taxa_performance", False):
+                endpoints_cfg["taxa_performance"] = {"enabled": True}
+        
+        # Construir sync_schedule se não existir
+        if "sync_schedule" not in config:
+            config["sync_schedule"] = {
+                "start_date": config.get("start_date"),
+                "end_date": config.get("end_date"), 
+                "date_step_days": config.get("date_step_days", 1)
+            }
+        
+        # Atualizar config com estruturas convertidas
+        config["categories"] = categories
+        config["endpoints"] = endpoints_cfg
+        
+        # === RESTO DO CÓDIGO EXATAMENTE IGUAL AO ATUAL ===
+        
         for category_name, category_cfg in categories.items():
             if not category_cfg.get("enabled", False):
                 continue
@@ -304,10 +281,9 @@ class SourceBtg(AbstractSource):
                 if not ep_cfg.get("enabled", True):
                     continue
                 if endpoint_name not in ENDPOINT_CONFIGS:
-                    logger.warning(f"⚠️ endpoint '{endpoint_name}' não existe no ENDPOINT_CONFIGS")
+                    logger.warning(f"endpoint '{endpoint_name}' não existe no ENDPOINT_CONFIGS")
                     continue
 
-                # defaults do ENDPOINT_CONFIGS > params do usuário
                 defaults = ENDPOINT_CONFIGS[endpoint_name].get("parameters", {}) or {}
                 user_params = ep_cfg.get("params", {}) or {}
                 merged_params = {**defaults, **user_params}
@@ -318,7 +294,6 @@ class SourceBtg(AbstractSource):
                 merged_config = {
                     **config,
                     "base_url": base_url,
-                    # "url_base": base_url,
                     "category_auth": self._effective_auth(config, category_cfg),
                     "current_endpoint": endpoint_name,
                     "current_category": category_name,
@@ -333,9 +308,9 @@ class SourceBtg(AbstractSource):
                     endpoint=endpoint_name,
                 )
                 streams.append(stream)
-                logger.info(f"✅ Created stream: {stream_name}")
+                logger.info(f"Created stream: {stream_name}")
 
-        logger.info(f"📊 Created {len(streams)} streams total")
+        logger.info(f"Created {len(streams)} streams total")
         return streams
 
     def _create_route_config(self, endpoint: str, category: str) -> dict:
