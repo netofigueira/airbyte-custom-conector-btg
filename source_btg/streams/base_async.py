@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 
 from airbyte_cdk.sources.streams.http import HttpStream
 
+import logging
+
 
 class AsyncJobStream(HttpStream):
     """
@@ -24,6 +26,7 @@ class AsyncJobStream(HttpStream):
         self.route = route
         self._token_provider = token_provider
         self._name = route.get("name", "btg_stream")
+        self.log = logging.getLogger("airbyte")
         # Inicializar session do requests
         self.session = requests.Session()
         super().__init__()
@@ -45,7 +48,7 @@ class AsyncJobStream(HttpStream):
     # ========== stubs obrigatórios do CDK ==========
     @property
     def url_base(self) -> str:
-        base = (self.cfg.get("base_url") or self.cfg.get("url_base") or "https://funds.btgpactual.com").rstrip("/")
+        base = (self.cfg.get("url_base")  or "https://funds.btgpactual.com").rstrip("/")
         return base + "/"
 
     def path(self, **kwargs) -> str:
@@ -199,15 +202,15 @@ class AsyncJobStream(HttpStream):
         url = self.url_base.rstrip("/") + "/" + path.lstrip("/")
 
         # Debug
-        print(f"DEBUG _submit: {method} {url}")
-        print(f"DEBUG body: {body}")
-        print(f"DEBUG params: {params}")
-        print(f"DEBUG slice_ctx: {slice_ctx}")
-        print(f"DEBUG auth type: {auth}")
+        self.log.debug(f"DEBUG _submit: {method} {url}")
+        self.log.debug(f"DEBUG body: {body}")
+        self.log.debug(f"DEBUG params: {params}")
+        self.log.debug(f"DEBUG slice_ctx: {slice_ctx}")
+        self.log.debug(f"DEBUG auth type: {auth}")
 
         # Pegar token fresco
         token = self.tk.get()
-        print(f"DEBUG token: {token[:30]}..." if token else "DEBUG token: None")
+        self.log.debug(f"DEBUG token: {token[:30]}..." if token else "DEBUG token: None")
 
         # Headers baseado no tipo de auth
         if auth == "bearer":
@@ -230,7 +233,7 @@ class AsyncJobStream(HttpStream):
                 "Content-Type": "application/json"
             }
 
-        print(f"DEBUG headers: {headers}")
+        self.log.debug(f" headers: {headers}")
 
         r = self.session.request(
             method,
@@ -241,8 +244,8 @@ class AsyncJobStream(HttpStream):
             timeout=self.cfg.get("http_timeout_seconds", 60),
         )
         
-        print(f"DEBUG response status: {r.status_code}")
-        print(f"DEBUG response: {r.text}")
+        self.log.debug("f response status: {r.status_code}")
+        self.log.debug(f" response: {r.text}")
         
         r.raise_for_status()
         js = r.json()
@@ -267,7 +270,7 @@ class AsyncJobStream(HttpStream):
         deadline = time.time() + int(self.cfg.get("max_wait_seconds", 900))
         delay = 5
 
-        print(f"DEBUG _wait_ticket: polling {ticket_id}")
+        self.log.debug(f" _wait_ticket: polling {ticket_id}")
 
         while True:
             r = self.session.get(
@@ -277,7 +280,7 @@ class AsyncJobStream(HttpStream):
                 timeout=self.cfg.get("http_timeout_seconds", 60),
             )
             
-            print(f"DEBUG poll status: {r.status_code}")
+            self.log.debug(f" poll status: {r.status_code}")
             
             ctype = (r.headers.get("Content-Type") or "").lower()
             body = r.content
@@ -288,26 +291,26 @@ class AsyncJobStream(HttpStream):
 
                 # Conteúdo inline (XML/ZIP direto)
                 if "xml" in ctype or "text/" in ctype or looks_xml or looks_zip:
-                    print(f"DEBUG: Got inline content ({len(body)} bytes)")
+                    self.log.debug(f": Got inline content ({len(body)} bytes)")
                     return {"__mode__": "inline", "payload": body}
 
                 # Resposta JSON
                 if "json" in ctype:
                     try:
                         js = r.json()
-                        print(f"DEBUG: Got JSON response: {js}")
+                        self.log.debug(f" Got JSON response: {js}")
                         
                         # Verificar se ainda está processando
                         result = js.get("result", "")
                         if result in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING"]:
-                            print(f"DEBUG: Still processing ({result})... waiting")
+                            self.log.debug(f" Still processing ({result})... waiting")
                             # Continuar o loop
                         else:
                             # Job completou
                             
                             # Se tem arquivos para download
                             if js.get("files"):
-                                print(f"DEBUG: Found files for download: {js.get('files')}")
+                                self.log.debug(f" Found files for download: {js.get('files')}")
                                 return {"__mode__": "download", "json": js}
                             
                             # Se o result contém dados diretos
@@ -324,14 +327,14 @@ class AsyncJobStream(HttpStream):
                         # Se chegou aqui, ainda processando ou sem dados válidos
                         
                     except Exception as e:
-                        print(f"DEBUG: Error parsing JSON: {e}")
+                        self.log.debug(f": Error parsing JSON: {e}")
                         pass
 
             # Timeout check
             if time.time() > deadline:
                 raise Exception(f"Timeout aguardando ticket {ticket_id}")
 
-            print(f"DEBUG: Waiting {delay}s...")
+            self.log.debug(f": Waiting {delay}s...")
             time.sleep(delay + random.random() * 2)
             delay = min(delay * 1.5, 45)
 
@@ -341,7 +344,7 @@ class AsyncJobStream(HttpStream):
         url = (url_or_path if url_or_path.startswith(("http://", "https://")) 
                else self.url_base.rstrip("/") + "/" + url_or_path.lstrip("/"))
         
-        print(f"DEBUG: Downloading from {url}")
+        self.log.debug(f": Downloading from {url}")
         r = self.session.get(
             url,
             headers=self._hdr(auth),
@@ -354,10 +357,10 @@ class AsyncJobStream(HttpStream):
     @staticmethod
     def _unzip_if_needed(raw: bytes) -> bytes:
         if len(raw) >= 2 and raw[0:2] == b"PK":
-            print(f"DEBUG: Unzipping content ({len(raw)} bytes)")
+            self.log.debug(f": Unzipping content ({len(raw)} bytes)")
             with ZipFile(BytesIO(raw)) as zf:
                 first = zf.namelist()[0]
-                print(f"DEBUG: Extracting {first}")
+                self.log.debug(f": Extracting {first}")
                 return zf.read(first)
         return raw
 
@@ -421,18 +424,41 @@ class AsyncJobStream(HttpStream):
             return [{"raw_content": text_stripped}]
             
         except Exception as e:
-            print(f"DEBUG: Parse error: {e}")
+            self.log.debug(f": Parse error: {e}")
             return [{"raw_content": payload.decode('utf-8', errors='ignore'), "parse_error": str(e)}]
 
     def get_json_schema(self):
-        return {"type": "object", "additionalProperties": True}
+        # Schema mínimo + metacampos; permite colunas extras do payload
+        return {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "_ticket_id": {"type": ["string", "null"]},
+                "_row_number": {"type": ["integer", "null"]},
+                "_dt_referencia": {"type": ["string", "null"]},   # se puder, emita YYYY-MM-DD
+                "_route": {"type": ["string", "null"]},
+                "_category": {"type": ["string", "null"]},
+                "_endpoint": {"type": ["string", "null"]},
+                "_source_category": {"type": ["string", "null"]},
+                "_api_endpoint": {"type": ["string", "null"]},
+                "_file_info": {"type": ["object", "null"]},
+                "_source_json": {"type": ["object", "null"]},
+                "error": {"type": ["string", "null"]},
+                "message": {"type": ["string", "null"]},
+                "json_response": {"type": ["object", "null"]},
+                "raw_content": {"type": ["string", "null"]},
+                "xml_content": {"type": ["string", "null"]},
+                "csv_content": {"type": ["string", "null"]},
+                "parse_error": {"type": ["string", "null"]}
+            }
+        }
 
     # ---------- loop principal ----------
     def read_records(self, stream_slice: Mapping = None, **kwargs) -> Iterable[Mapping]:
-        print(f"🚨 DEBUG read_records: ENTRADA")
-        print(f"🚨 DEBUG read_records: stream_slice = {stream_slice}")
-        print(f"🚨 DEBUG read_records: type(stream_slice) = {type(stream_slice)}")
-        print(f"🚨 DEBUG read_records: kwargs = {kwargs}")
+        self.log.debug(f" read_records: ENTRADA")
+        self.log.debug(f"read_records: stream_slice = {stream_slice}")
+        self.log.debug(f" read_records: type(stream_slice) = {type(stream_slice)}")
+        self.log.debug(f" read_records: kwargs = {kwargs}")
         
         slice_ = stream_slice or {}
         slice_ctx = {
@@ -446,16 +472,16 @@ class AsyncJobStream(HttpStream):
             if key not in [ "date_str", "date_iso"]:
                 slice_ctx[key] = value
         
-        print(f"🔍 DEBUG read_records: slice_ctx final = {slice_ctx}")
+        self.log.debug(f" read_records: slice_ctx final = {slice_ctx}")
 
         try:
             # 1. Submit job
             ticket = self._submit(slice_ctx)
-            print(f"DEBUG: Got ticket {ticket}")
+            self.log.debug(f": Got ticket {ticket}")
             
             # 2. Wait for completion
             status = self._wait_ticket(ticket)
-            print(f"DEBUG: Ticket ready, mode: {status.get('__mode__')}")
+            self.log.debug(f": Ticket ready, mode: {status.get('__mode__')}")
             
             row_idx = 0
 
@@ -511,7 +537,7 @@ class AsyncJobStream(HttpStream):
                             row_idx += 1
                             
                     except Exception as e:
-                        print(f"ERROR downloading file {file_info}: {e}")
+                        self.log.error(f"ERROR downloading file {file_info}: {e}")
                         yield {
                             "error": f"Download failed: {e}",
                             "file_info": file_info,
@@ -568,7 +594,7 @@ class AsyncJobStream(HttpStream):
                 }
                 
         except Exception as e:
-            print(f"ERROR in read_records: {e}")
+            self.log.error(f" in read_records: {e}")
             # Yield erro como record para debug
             yield {
                 "error": str(e),

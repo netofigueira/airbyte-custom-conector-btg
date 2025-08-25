@@ -6,7 +6,7 @@ from typing import Any, List, Mapping, Tuple
 from .streams.base_async import AsyncJobStream
 from .auth import BTGTokenProvider
 from .streams.endpoint_configs import ENDPOINT_CONFIGS
-
+import logging
 
 class SourceBtg(AbstractSource):
 
@@ -155,8 +155,9 @@ class SourceBtg(AbstractSource):
 
         base_url = config["base_url"]
         categories = config.get("categories", {}) or {"DEFAULT": {"enabled": True}}
-        endpoints_cfg = config.get("endpoints", {}) or {}
-
+        endpoints_cfg = config.get("endpoints", {}) or {"fluxo_caixa": {"enabled": True}, "cadastro_fundos":{"enabled":True}} 
+       
+        logger = logging.getLogger("airbyte")
         for category_name, category_cfg in categories.items():
             if not category_cfg.get("enabled", False):
                 continue
@@ -167,7 +168,7 @@ class SourceBtg(AbstractSource):
                 if not ep_cfg.get("enabled", True):
                     continue
                 if endpoint_name not in ENDPOINT_CONFIGS:
-                    print(f"⚠️ endpoint '{endpoint_name}' não existe no ENDPOINT_CONFIGS")
+                    logger.warning(f"⚠️ endpoint '{endpoint_name}' não existe no ENDPOINT_CONFIGS")
                     continue
 
                 # merge de parâmetros: defaults do ENDPOINT_CONFIGS > params do usuário
@@ -195,9 +196,9 @@ class SourceBtg(AbstractSource):
                     endpoint=endpoint_name,
                 )
                 streams.append(stream)
-                print(f"✅ Created stream: {stream_name}")
+                logger.info(f"✅ Created stream: {stream_name}")
 
-        print(f"📊 Created {len(streams)} streams total")
+        logger.info(f"📊 Created {len(streams)} streams total")
         return streams
 
     def _create_route_config(self, endpoint: str, category: str) -> dict:
