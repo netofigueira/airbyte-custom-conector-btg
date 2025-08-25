@@ -33,7 +33,10 @@ class AsyncJobStream(HttpStream):
 
 
     def _timeout(self) -> int:
-        return int(self.cfg.get("http_timeout_seconds")
+        return int(
+
+                self.cfg.get("http_timeout_seconds")
+                or self.cfg.get("http_timeout_seconds") 
                 or self.cfg.get("technical", {}).get("timeout_seconds")
                 or 60)
 
@@ -48,7 +51,7 @@ class AsyncJobStream(HttpStream):
     # ========== stubs obrigatórios do CDK ==========
     @property
     def url_base(self) -> str:
-        base = (self.cfg.get("url_base")  or "https://funds.btgpactual.com").rstrip("/")
+        base = (self.cfg.get("base_url")  or "https://funds.btgpactual.com").rstrip("/")
         return base + "/"
 
     def path(self, **kwargs) -> str:
@@ -267,7 +270,7 @@ class AsyncJobStream(HttpStream):
         auth = self.route.get("ticket_auth", "xsecure")
         url = self.url_base.rstrip("/") + "/" + path.lstrip("/")
 
-        deadline = time.time() + int(self.cfg.get("max_wait_seconds", 900))
+        deadline = time.time() + int(self.cfg.get("polling_max_wait_seconds", 900))
         delay = 5
 
         self.log.debug(f" _wait_ticket: polling {ticket_id}")

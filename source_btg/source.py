@@ -12,21 +12,22 @@ class SourceBtg(AbstractSource):
 
     # ---------- SPEC ----------
     def spec(self, logger) -> ConnectorSpecification:
-        # personas removido; categories e sync_schedule passam a ser opcionais
         return ConnectorSpecification(
             documentationUrl="https://docs.airbyte.com/integrations/sources/btg",
             connectionSpecification={
                 "$schema": "http://json-schema.org/draft-07/schema#",
-                "title": "BTG Source Spec",
+                "title": "BTG API Source",
                 "type": "object",
                 "required": ["base_url", "auth", "endpoints"],
                 "additionalProperties": False,
                 "properties": {
+                    # ===== BASIC CONFIG =====
                     "base_url": {
                         "type": "string",
                         "title": "Base URL",
-                        "description": "Ex.: https://api.seubtg.com/v1",
-                        "examples": ["https://api.seubtg.com/v1"]
+                        "description": "BTG API base URL",
+                        "default": "https://funds.btgpactual.com",
+                        "examples": ["https://funds.btgpactual.com"]
                     },
                     "auth": {
                         "type": "object",
@@ -38,62 +39,195 @@ class SourceBtg(AbstractSource):
                             "client_secret": {"type": "string", "title": "Client Secret", "airbyte_secret": True}
                         }
                     },
+
+                    # ===== (OPCIONAL) OVERRIDE POR CATEGORIA =====
                     "categories": {
                         "type": "object",
-                        "title": "Categories (opcional)",
-                        "description": "Overrides de credencial por categoria; deixe vazio para herdar de 'auth'.",
-                        "patternProperties": {
-                            "^[a-zA-Z_]+$": {
+                        "title": "Category credentials (opcional)",
+                        "description": "Se quiser um conector por categoria, deixe vazio. Se quiser um único conector para várias categorias, habilite e informe credenciais.",
+                        "additionalProperties": False,
+                        "properties": {
+                            "GESTORA": {
                                 "type": "object",
-                                "required": ["enabled"],
                                 "additionalProperties": False,
                                 "properties": {
-                                    "enabled": {"type": "boolean", "default": True},
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "client_id": {"type": "string"},
+                                    "client_secret": {"type": "string", "airbyte_secret": True}
+                                }
+                            },
+                            "ALL": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "client_id": {"type": "string"},
+                                    "client_secret": {"type": "string", "airbyte_secret": True}
+                                }
+                            },
+                            "LIQUIDOS": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "client_id": {"type": "string"},
+                                    "client_secret": {"type": "string", "airbyte_secret": True}
+                                }
+                            },
+                            "CE": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
                                     "client_id": {"type": "string"},
                                     "client_secret": {"type": "string", "airbyte_secret": True}
                                 }
                             }
-                        },
-                        "additionalProperties": False
-                    },
-                    "sync_schedule": {
-                        "type": "object",
-                        "title": "Date window (opcional; usado só por rotas que aceitam data)",
-                        "required": [],
-                        "additionalProperties": False,
-                        "properties": {
-                            "start_date": {"type": "string", "format": "date"},
-                            "end_date": {"type": "string", "format": "date"},
-                            "date_step_days": {"type": "integer", "default": 1, "minimum": 1}
                         }
                     },
+
+                    # ===== JANELA DE DATAS (usada só quando a rota aceita data) =====
+                    "sync_schedule": {
+                        "type": "object",
+                        "title": "Date window (opcional)",
+                        "additionalProperties": False,
+                        "properties": {
+                            "start_date": {"type": "string", "format": "date", "title": "Start date"},
+                            "end_date": {"type": "string", "format": "date", "title": "End date"},
+                            "date_step_days": {
+                                "type": "integer", "title": "Date step (days)",
+                                "description": "Tamanho do lote em dias (aplicável às rotas com data).",
+                                "default": 1, "minimum": 1, "maximum": 30
+                            }
+                        }
+                    },
+
+                    # ===== ENDPOINTS (cada rota tem 'enabled' + 'params' tipados) =====
                     "endpoints": {
                         "type": "object",
                         "title": "Endpoints",
-                        "description": "Ative rotas e passe parâmetros. Valores podem ser string ou lista de strings.",
-                        "patternProperties": {
-                            "^[a-zA-Z_]+$": {
+                        "additionalProperties": False,
+                        "properties": {
+                            "cadastro_fundos": {
                                 "type": "object",
                                 "additionalProperties": False,
                                 "properties": {
                                     "enabled": {"type": "boolean", "default": True},
+                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
+                                }
+                            },
+                            "fluxo_caixa": {
+                                "type": "object",
+                                "description": "Requer janela de datas em sync_schedule.",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": True},
+                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
+                                }
+                            },
+                            "movimentacao_fundo_d0": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
                                     "params": {
                                         "type": "object",
-                                        "additionalProperties": {
-                                            "oneOf": [
-                                                {"type": "string"},
-                                                {"type": "array", "items": {"type": "string"}}
-                                            ]
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "consult_type": {
+                                                "type": "array",
+                                                "title": "Consult type",
+                                                "items": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
+                                                "minItems": 1, "uniqueItems": True
+                                            },
+                                            "status": {
+                                                "type": "array",
+                                                "title": "Status",
+                                                "items": {"type": "string", "enum": ["LIQUIDADO", "PENDENTE", "CANCELADO", "PROCESSANDO"]},
+                                                "minItems": 1, "uniqueItems": True
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "carteira": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "params": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "report_type": {
+                                                "type": "array",
+                                                "title": "Tipo de relatório",
+                                                "items": {"type": "integer", "enum": [1, 2, 3, 4, 5]},
+                                                "minItems": 1, "uniqueItems": True
+                                            },
+                                            "fund_name": {
+                                                "type": "array",
+                                                "title": "Fundos",
+                                                "items": {"type": "string"},
+                                                "minItems": 1, "uniqueItems": True
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "renda_fixa": {
+                                "type": "object",
+                                "description": "Requer janela de datas em sync_schedule.",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
+                                }
+                            },
+                            "extrato_cc": {
+                                "type": "object",
+                                "description": "Requer janela de datas em sync_schedule.",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
+                                }
+                            },
+                            "money_market": {
+                                "type": "object",
+                                "description": "Requer data (usa sync_schedule).",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "params": {"type": "object", "additionalProperties": False, "properties": {}}
+                                }
+                            },
+                            "taxa_performance": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "enabled": {"type": "boolean", "default": False},
+                                    "params": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "fund_name": {
+                                                "type": "array",
+                                                "title": "Fundos",
+                                                "items": {"type": "string"},
+                                                "minItems": 1, "uniqueItems": True
+                                            }
                                         }
                                     }
                                 }
                             }
-                        },
-                        "additionalProperties": False
+                        }
                     },
+
+                    # ===== ADVANCED =====
                     "technical": {
                         "type": "object",
-                        "title": "Technical",
+                        "title": "Advanced",
                         "additionalProperties": False,
                         "properties": {
                             "stream_strategy": {
@@ -101,13 +235,15 @@ class SourceBtg(AbstractSource):
                                 "enum": ["category_endpoint", "split_by_category"],
                                 "default": "category_endpoint"
                             },
-                            "max_retries": {"type": "integer", "default": 3, "minimum": 0},
-                            "timeout_seconds": {"type": "integer", "default": 300, "minimum": 1}
+                            "max_retries": {"type": "integer", "default": 3, "minimum": 0, "maximum": 10},
+                            "timeout_seconds": {"type": "integer", "default": 300, "minimum": 30, "maximum": 1800},
+                            "polling_max_wait_seconds": {"type": "integer", "default": 900, "minimum": 300, "maximum": 3600}
                         }
                     }
                 }
             }
         )
+
 
     # ---------- helpers ----------
     def _effective_auth(self, config: Mapping[str, Any], category_cfg: Mapping[str, Any]) -> dict:
@@ -151,13 +287,13 @@ class SourceBtg(AbstractSource):
 
     # ---------- streams ----------
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
+        logger = logging.getLogger("airbyte")
         streams: List[Stream] = []
 
         base_url = config["base_url"]
-        categories = config.get("categories", {}) or {"DEFAULT": {"enabled": True}}
-        endpoints_cfg = config.get("endpoints", {}) or {"fluxo_caixa": {"enabled": True}, "cadastro_fundos":{"enabled":True}} 
-       
-        logger = logging.getLogger("airbyte")
+        categories = config.get("categories") or {"DEFAULT": {"enabled": True}}
+        endpoints_cfg = config.get("endpoints", {})
+
         for category_name, category_cfg in categories.items():
             if not category_cfg.get("enabled", False):
                 continue
@@ -171,7 +307,7 @@ class SourceBtg(AbstractSource):
                     logger.warning(f"⚠️ endpoint '{endpoint_name}' não existe no ENDPOINT_CONFIGS")
                     continue
 
-                # merge de parâmetros: defaults do ENDPOINT_CONFIGS > params do usuário
+                # defaults do ENDPOINT_CONFIGS > params do usuário
                 defaults = ENDPOINT_CONFIGS[endpoint_name].get("parameters", {}) or {}
                 user_params = ep_cfg.get("params", {}) or {}
                 merged_params = {**defaults, **user_params}
@@ -182,6 +318,7 @@ class SourceBtg(AbstractSource):
                 merged_config = {
                     **config,
                     "base_url": base_url,
+                    # "url_base": base_url,
                     "category_auth": self._effective_auth(config, category_cfg),
                     "current_endpoint": endpoint_name,
                     "current_category": category_name,
