@@ -108,12 +108,12 @@ class SourceBtg(AbstractSource):
 
                     "carteira_type_report":{
 
-                        "type":"int",
+                        "type":"integer",
                         "title": "typeReport - rota Carteira",
-                        "description": "define o tipo de report do endpoint de carteira."
+                        "description": "define o tipo de report do endpoint de carteira.",
                         "default": 3,
                         "examples": [1,2,3]
-                    }
+                    },
 
                     "fund_name": {
 
@@ -122,7 +122,7 @@ class SourceBtg(AbstractSource):
                         "description": "define o nome do fundo para requisicao",
                         "default": "RIZA MEYENII RFX FIM",
                         "examples": ["RIZA MEYENII RFX FIM"]
-                    }
+                    },
 
 
                     # === DATE RANGE ===
