@@ -88,22 +88,43 @@ class SourceBtg(AbstractSource):
                         "default": False
                     },
                     
-                    # === MOVIMENTACAO PARAMS ===
+                    # === MOVIMENTACAO FUNDO D0 PARAMS ===
                     "movimentacao_consult_types": {
                         "type": "string",
                         "title": "Movimentacao Consult Types",
-                        "description": "Comma-separated consult types (e.g: 1,2,3)",
-                        "default": "1,2",
-                        "examples": ["1,2", "1,2,3"]
+                        "description": "Tipo de consulta para mov. fundo d0 ex: LANCAMENTO",
+                        "default": "LANCAMENTO",
+                        "examples": ["LANCAMENTO"]
                     },
                     "movimentacao_status": {
                         "type": "string", 
                         "title": "Movimentacao Status",
-                        "description": "Comma-separated status (e.g: LIQUIDADO,PENDENTE)",
-                        "default": "LIQUIDADO,PENDENTE",
-                        "examples": ["LIQUIDADO,PENDENTE", "LIQUIDADO"]
+                        "description": "Status da consulta de mov. fundo d0.",
+                        "default": "TODOS",
+                        "examples": ["TODOS", "LIQUIDADO"]
                     },
                     
+                    # ===== PARAMETRO DE TIPO DE REPORT DA CARTEIRA ========
+
+                    "carteira_type_report":{
+
+                        "type":"int",
+                        "title": "typeReport - rota Carteira",
+                        "description": "define o tipo de report do endpoint de carteira."
+                        "default": 3,
+                        "examples": [1,2,3]
+                    }
+
+                    "fund_name": {
+
+                        "type":"string",
+                        "title":"fundName - usado nas rotas carteira e taxa performance",
+                        "description": "define o nome do fundo para requisicao",
+                        "default": "RIZA MEYENII RFX FIM",
+                        "examples": ["RIZA MEYENII RFX FIM"]
+                    }
+
+
                     # === DATE RANGE ===
                     "start_date": {
                         "type": "string",
@@ -132,8 +153,8 @@ class SourceBtg(AbstractSource):
                         "type": "string",
                         "title": "Category",
                         "description": "BTG API Category", 
-                        "enum": ["DEFAULT", "GESTORA", "ALL", "LIQUIDOS", "CE"],
-                        "default": "DEFAULT"
+                        "enum": [ "GESTORA", "ALL", "LIQUIDOS", "CE", "DL"],
+                        "default": "GESTORA"
                     },
                     
                     # === ADVANCED ===
@@ -220,6 +241,26 @@ class SourceBtg(AbstractSource):
         if not endpoints_cfg:  # Se não tem endpoints no config, usar checkboxes
             endpoints_cfg = {}
             
+
+            fund_name = config.get("fund_name", "RIZA MEYENII RFX FIM")
+
+            if config.get("enable_carteira", False):
+                endpoints_cfg["carteira"] = {
+                    "enabled": True,
+                    "params": {
+                        "report_type": config.get("carteira_type_report", 3),
+                        "fund_name": fund_name  # Reutiliza
+                    }
+                }
+
+            if config.get("enable_taxa_performance", False):
+                endpoints_cfg["taxa_performance"] = {
+                    "enabled": True,
+                    "params": {
+                        "fund_name": fund_name  # Mesmo campo
+                    }
+                }
+
             if config.get("enable_cadastro_fundos", True):
                 endpoints_cfg["cadastro_fundos"] = {"enabled": True}
                 
@@ -228,10 +269,10 @@ class SourceBtg(AbstractSource):
                 
             if config.get("enable_movimentacao_fundo_d0", False):
                 # Converter strings "1,2,3" → arrays [1,2,3]
-                consult_types_str = config.get("movimentacao_consult_types", "1,2")
-                status_str = config.get("movimentacao_status", "LIQUIDADO,PENDENTE")
+                consult_types_str = config.get("movimentacao_consult_types", "LANCAMENTO")
+                status_str = config.get("movimentacao_status", "TODOS")
                 
-                consult_types = [int(x.strip()) for x in consult_types_str.split(",") if x.strip()]
+                consult_types = [x.strip() for x in consult_types_str.split(",") if x.strip()]
                 status_list = [x.strip() for x in status_str.split(",") if x.strip()]
                 
                 endpoints_cfg["movimentacao_fundo_d0"] = {
