@@ -247,7 +247,7 @@ class AsyncJobStream(HttpStream):
             timeout=self.cfg.get("http_timeout_seconds", 60),
         )
         
-        self.log.debug("f response status: {r.status_code}")
+        self.log.debug(f" response status: {r.status_code}")
         self.log.debug(f" response: {r.text}")
         
         r.raise_for_status()
@@ -322,7 +322,7 @@ class AsyncJobStream(HttpStream):
                             result_field = self.route.get("ticket_result_field", "result")
                             ready = self.dot_get(js, result_field) if result_field else js
                             
-                            if ready and ready not in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING"]:
+                            if ready and ready not in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING", "Aguardando processamento"]:
                                 # Se o result é XML como string
                                 if isinstance(ready, str) and ready.lstrip().startswith("<"):
                                     return {"__mode__": "inline", "payload": ready.encode("utf-8")}
@@ -359,8 +359,7 @@ class AsyncJobStream(HttpStream):
         return r.content
 
     # ---------- unzip se necessário ----------
-    @staticmethod
-    def _unzip_if_needed(raw: bytes) -> bytes:
+    def _unzip_if_needed(self, raw: bytes) -> bytes:
         if len(raw) >= 2 and raw[0:2] == b"PK":
             self.log.debug(f": Unzipping content ({len(raw)} bytes)")
             with ZipFile(BytesIO(raw)) as zf:
@@ -559,7 +558,7 @@ class AsyncJobStream(HttpStream):
                 result_field = self.route.get("ticket_result_field", "result")
                 result_data = self.dot_get(json_data, result_field) if result_field else json_data
                 
-                if result_data and result_data not in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING"]:
+                if result_data and result_data not in ["Processando", "Processing", "In Progress", "PROCESSING", "PENDING", "Aguardando processamento"]:
                     # Se result_data é uma lista
                     if isinstance(result_data, list):
                         rows = result_data
@@ -575,13 +574,13 @@ class AsyncJobStream(HttpStream):
                             "_dt_referencia": slice_ctx["date"],
                             "_ticket_id": ticket,
                             "_row_number": row_idx,
-                            "_source_json": json_data,
+                            #"_source_json": json_data,
                         }
                         row_idx += 1
                 else:
                     yield {
                         "message": f"No processable data found in JSON response",
-                        "json_response": json_data,
+                        #"json_response": json_data,
                         "_route": self._name,
                         "_dt_referencia": slice_ctx["date"],
                         "_ticket_id": ticket,

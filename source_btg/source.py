@@ -372,7 +372,7 @@ class CategoryAsyncJobStream(AsyncJobStream):
     def __init__(self, config, token_provider, route, category, endpoint):
         self.category = category
         self.endpoint = endpoint
-        self._name = route.get("name", f"{category}_{endpoint}")  # garante name
+        self._name = route.get("name", f"{category}_{endpoint}")  # garante nAME
         super().__init__(config, token_provider, route)
 
     @property
